@@ -28,13 +28,33 @@
 # IMPORTS
 #==========================================================================
 from beagle_py import *
+import pickle
 
+#==========================================================================
+# i2c event class
+#==========================================================================
+
+class i2c_event:
+    i2c_addr = 0x0
+    time_stamp = 0x0
+    read_write_flag = 0x0
+    event_data = 0x0
+    error_code = 0x0
+    def __init__(self,capline,input_time_stamp,input_error_code):
+        self.i2c_addr = capline[0]
+        self.time_stamp = input_time_stamp
+        self.read_write_flag = capline[0]&0x8F
+        self.event_data = capline[1:]
+        self.error_code = input_error_code
+    def __str__(self):
+        i2c_info =  'i2c_addr=0x%x, time_stamp= %s, read_write=0x%x, error_code=0x%x, \ni2c_data= %s  \n\n\n' \
+            % (self.i2c_addr,(self.time_stamp).tostring(),self.read_write_flag,self.error_code,self.event_data)
+        return i2c_info
 
 #==========================================================================
 # GLOBALS
 #==========================================================================
 beagle = 0
-
 
 #==========================================================================
 # UTILITY FUNCTIONS
@@ -87,12 +107,15 @@ def i2cdump (max_bytes, num_packets):
     print "index,time(ns),I2C,status,<addr:r/w>(*),data0 ... dataN(*)"
     sys.stdout.flush()
 
-    # Allocate the arrays to be passed into the read function
-    data_in = array_u16(max_bytes)
-    timing  = array_u32(timing_size)
+
+    i2c_packets = []
 
     # Capture and print each transaction
     while (i < num_packets or num_packets == 0):
+        # Allocate the arrays to be passed into the read function
+        data_in = array_u16(max_bytes)
+        timing  = array_u32(timing_size)
+
         # Read transaction with bit timing data
         (count, status, time_sop, time_duration,
          time_dataoffset, data_in, timing) = \
@@ -182,8 +205,21 @@ def i2cdump (max_bytes, num_packets):
         print ""
         sys.stdout.flush()
 
+        # Collect i2c data packet
+        i2c_data_packet = i2c_event(data_in,timing,status)
+        i2c_packets.append(i2c_data_packet)
+        
+
     # Stop the capture
     bg_disable(beagle)
+    sorted_i2c_packets = sorted(i2c_event, key=lambda i2c_event:i2c_event.i2c_addr)
+    for i2cpacket in sorted_i2c_packets:
+        print(i2cpacket)
+    
+    fw = open("capture_i2c.dat",'wb')
+    pickle.dump(sorted_i2c_events,fw)
+    fw.close()
+
 
 
 #==========================================================================
